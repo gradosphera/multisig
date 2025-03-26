@@ -160,6 +160,7 @@ button:disabled,
   background-size: contain;
   margin-right: 8px;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 #header_title {

@@ -140,6 +140,28 @@ const showScreen = (name: ScreenType): void => {
   }
 };
 
+const goHome = (): void => {
+  if (currentScreen === "loadingScreen") {
+    return;
+  }
+  if (
+    currentScreen === "importScreen" ||
+    (currentScreen === "newMultisigScreen" && !currentMultisigInfo)
+  ) {
+    newMultisigClear();
+    showScreen("startScreen");
+  } else {
+    clearOrder();
+    newOrderClear();
+    newMultisigClear();
+    pushUrlState(currentMultisigAddress);
+    showScreen("multisigScreen");
+  }
+};
+
+$("#header_logo").addEventListener("click", () => goHome());
+$("#header_title").addEventListener("click", () => goHome());
+
 // TONCONNECT
 
 let myAddress: Address | null;
