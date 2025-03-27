@@ -258,13 +258,28 @@ export const checkMultisigOrder = async (
       const parsed = JettonMinter.parseTransfer(slice);
       if (parsed.customPayload)
         throw new Error("Отправка состояния не поддерживается");
-      assert(
+      let comment = "";
+      if (
         parsed.forwardPayload.remainingBits === 0 &&
-          parsed.forwardPayload.remainingRefs === 0,
-        "Отправка не поддерживается"
-      );
+        parsed.forwardPayload.remainingRefs === 0
+      ) {
+        comment = "без комментария";
+      } else if (parsed.forwardPayload.remainingBits >= 32) {
+        const op = parsed.forwardPayload.loadUint(32);
+        assert(
+          op === 0,
+          "Прямая передача произвольной полезной нагрузки не поддерживается"
+        );
+        comment =
+          'с комментарием "' + parsed.forwardPayload.loadStringTail() + '"';
+      } else {
+        assert(
+          false,
+          "Прямая передача произвольной полезной нагрузки не поддерживается"
+        );
+      }
       const toAddress = await formatAddressAndUrl(parsed.toAddress, isTestnet);
-      return `Отправить ${parsed.jettonAmount} жетонов с адреса мультикошелька на адрес пользователя ${toAddress};`;
+      return `Отправить ${parsed.jettonAmount} жетонов с адреса мультикошелька на адрес пользователя ${toAddress} с комментарием ${comment};`;
     } catch (e) {}
 
     try {

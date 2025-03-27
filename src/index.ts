@@ -765,7 +765,7 @@ $("#order_approveButton").addEventListener("click", async () => {
 
 // NEW ORDER
 
-type FieldType = "TON" | "Jetton" | "Address" | "URL" | "Status";
+type FieldType = "TON" | "Jetton" | "Address" | "URL" | "Status" | "String";
 
 interface ValidatedValue {
   value?: any;
@@ -816,11 +816,17 @@ const validateValue = (
     }
   };
 
-  if (value === null || value === undefined || value === "") {
+  if (fieldType !== "String" && (value === undefined || value === "")) {
     return makeError(`Пусто`);
   }
 
   switch (fieldType) {
+    case "String":
+      return {
+        value,
+        error: undefined,
+      };
+
     case "TON":
       return parseAmount(value, 9);
 
@@ -967,8 +973,19 @@ const orderTypes: OrderType[] = [
         name: "Получатель",
         type: "Address",
       },
+      comment: {
+        name: "Комментарий",
+        type: "String",
+      },
     },
     makeMessage: async (values) => {
+      const body = !values.comment
+        ? beginCell().endCell()
+        : beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(values.comment)
+            .endCell();
+
       return {
         toAddress: values.toAddress,
         tonAmount: values.amount,
@@ -992,6 +1009,10 @@ const orderTypes: OrderType[] = [
         name: "Получатель",
         type: "Address",
       },
+      comment: {
+        name: "Комментарий",
+        type: "String",
+      },
     },
     makeMessage: async (values): Promise<MakeMessageResult> => {
       const jettonMinterAddress: Address = values.jettonMinterAddress.address;
@@ -1003,6 +1024,13 @@ const orderTypes: OrderType[] = [
         provider,
         multisigAddress
       );
+
+      const forwardPayload = !values.comment
+        ? null
+        : beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(values.comment)
+            .endCell();
 
       return {
         toAddress: {
@@ -1017,7 +1045,7 @@ const orderTypes: OrderType[] = [
           multisigAddress,
           null,
           0n,
-          null
+          forwardPayload
         ),
       };
     },
