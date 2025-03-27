@@ -400,25 +400,31 @@ export const checkMultisig = async (
         }
         return false;
       };
-      //
-      // for (const lastOrder of lastOrders) {
-      //  if (lastOrder.type === "executed") {
-      //    const transactionHashHex = Buffer.from(
-      //      lastOrder.transactionHash,
-      //      "base64"
-      //    ).toString("hex");
-      //    const result = await sendToTonApi(
-      //      "traces/" + transactionHashHex,
-      //      {},
-      //      isTestnet
-      //    );
-      //    if (findFailTx(result)) {
-      //      lastOrder.errorMessage = "Ошибка";
-      //    }
-      //  }
-      // }
+
+      const getFailedOrderPromises = [];
+
+      const getFailedOrder = async (lastOrder: LastOrder) => {
+        if (lastOrder.type === "executed") {
+          const transactionHashHex = Buffer.from(
+            lastOrder.transactionHash,
+            "base64"
+          ).toString("hex");
+          const result = await sendToTonApi(
+            "traces/" + transactionHashHex,
+            {},
+            isTestnet
+          );
+          if (findFailTx(result)) {
+            lastOrder.errorMessage = "Failed";
+          }
+        }
+      };
 
       for (const lastOrder of lastOrders) {
+        getFailedOrderPromises.push(getFailedOrder(lastOrder));
+      }
+
+      const getOrderInfo = async (lastOrder: LastOrder) => {
         if (lastOrder.type === "pending") {
           try {
             const orderInfo = await checkMultisigOrder(
@@ -446,7 +452,15 @@ export const checkMultisig = async (
             lastOrder.errorMessage = e.message;
           }
         }
+      };
+
+      const getOrderInfoPromises = [];
+
+      for (const lastOrder of lastOrders) {
+        getOrderInfoPromises.push(getOrderInfo(lastOrder));
       }
+
+      await Promise.all(getOrderInfoPromises.concat(getFailedOrderPromises));
 
       lastOrders = lastOrders.sort((a, b) => {
         if (a.type === b.type) {

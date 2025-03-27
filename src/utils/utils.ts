@@ -39,7 +39,7 @@ export const getAddressFormat = async (
 ): Promise<AddressInfo> => {
   const raw = address.toRawString();
 
-  let friendly = addressCache[raw];
+  let friendly = localStorage.getItem("address_" + raw);
   if (!friendly) {
     const result = await sendToIndex(
       "addressBook",
@@ -47,7 +47,7 @@ export const getAddressFormat = async (
       isTestnet
     );
     friendly = result[raw].user_friendly;
-    addressCache[raw] = friendly;
+    localStorage.setItem("address_" + raw, friendly);
   }
 
   return Address.parseFriendly(friendly);

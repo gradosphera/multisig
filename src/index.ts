@@ -403,7 +403,7 @@ const updateMultisig = async (
       MULTISIG_ORDER_CODE,
       IS_TESTNET,
       "aggregate",
-      isFirst
+      false
     );
 
     // Render if still relevant
@@ -591,7 +591,7 @@ const updateOrder = async (
       MULTISIG_ORDER_CODE,
       currentMultisigInfo,
       IS_TESTNET,
-      isFirstTime
+      false
     );
 
     // Render  if still relevant
