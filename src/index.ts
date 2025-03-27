@@ -506,6 +506,8 @@ const renderCurrentOrderInfo = (): void => {
     threshold,
     signers,
     expiresAt,
+    isMismatchThreshold,
+    isMismatchSigners,
   } = currentOrderInfo;
 
   const isExpired = new Date().getTime() > expiresAt.getTime();
@@ -531,6 +533,13 @@ const renderCurrentOrderInfo = (): void => {
     }${equalsMsgAddresses(signer.address, myAddress) ? YOU_BADGE : ""}</div>`;
   }
   $("#order_signersList").innerHTML = signersHTML;
+
+  $("#order_thresholdError").innerText = isMismatchThreshold
+    ? "Multisig threshold do not match order threshold"
+    : "";
+  $("#order_signersError").innerText = isMismatchSigners
+    ? "Multisig signers do not match order signers"
+    : "";
 
   let actionsHTML = "";
   for (const action of actions) {

@@ -400,23 +400,23 @@ export const checkMultisig = async (
         }
         return false;
       };
-
-      for (const lastOrder of lastOrders) {
-        if (lastOrder.type === "executed") {
-          const transactionHashHex = Buffer.from(
-            lastOrder.transactionHash,
-            "base64"
-          ).toString("hex");
-          const result = await sendToTonApi(
-            "traces/" + transactionHashHex,
-            {},
-            isTestnet
-          );
-          if (findFailTx(result)) {
-            lastOrder.errorMessage = "Ошибка";
-          }
-        }
-      }
+      //
+      // for (const lastOrder of lastOrders) {
+      //  if (lastOrder.type === "executed") {
+      //    const transactionHashHex = Buffer.from(
+      //      lastOrder.transactionHash,
+      //      "base64"
+      //    ).toString("hex");
+      //    const result = await sendToTonApi(
+      //      "traces/" + transactionHashHex,
+      //      {},
+      //      isTestnet
+      //    );
+      //    if (findFailTx(result)) {
+      //      lastOrder.errorMessage = "Ошибка";
+      //    }
+      //  }
+      // }
 
       for (const lastOrder of lastOrders) {
         if (lastOrder.type === "pending") {
@@ -433,6 +433,13 @@ export const checkMultisig = async (
               new Date().getTime() > orderInfo.expiresAt.getTime();
             if (isExpired) {
               lastOrder.type = "executed";
+            } else if (
+              orderInfo.isMismatchSigners ||
+              orderInfo.isMismatchThreshold
+            ) {
+              lastOrder.type = "executed";
+              lastOrder.errorMessage =
+                "Multisig signers or threshold do not match order";
             }
           } catch (e) {
             lastOrder.type = "executed";

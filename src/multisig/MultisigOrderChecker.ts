@@ -37,6 +37,8 @@ export interface MultisigOrderInfo {
   expiresAt: Date;
   actions: string[];
   stateInitMatches: boolean;
+  isMismatchSigners: boolean;
+  isMismatchThreshold: boolean;
 }
 
 const checkNumber = (n: number) => {
@@ -114,17 +116,14 @@ export const checkMultisigOrder = async (
     "Неправильный адрес заявки"
   );
 
+  let isMismatchSigners = false;
+  let isMismatchThreshold = false;
+
   if (!parsedData.isExecuted) {
-    assert(
-      multisigInfo.threshold <= parsedData.threshold,
-      "Количество подтверждающих не соответствует порогу заявки"
-    );
-    assert(
-      equalsAddressLists(
-        multisigInfo.signers.map((a) => a.address),
-        parsedData.signers
-      ),
-      "Количество подтверждающих не совпадает с количеством в заявке"
+    isMismatchThreshold = multisigInfo.threshold > parsedData.threshold;
+    isMismatchSigners = !equalsAddressLists(
+      multisigInfo.signers.map((a) => a.address),
+      parsedData.signers
     );
   }
 
@@ -435,5 +434,7 @@ export const checkMultisigOrder = async (
     expiresAt: new Date(parsedData.expirationDate * 1000),
     actions: parsedActions,
     stateInitMatches,
+    isMismatchSigners,
+    isMismatchThreshold,
   };
 };

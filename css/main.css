@@ -261,6 +261,10 @@ button:disabled,
   color: #ec6471;
 }
 
+.error {
+  color: #ec6471;
+}
+
 .multisig_lastOrder {
   cursor: pointer;
 }
