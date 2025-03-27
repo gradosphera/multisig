@@ -7,6 +7,10 @@ export interface AddressInfo {
   address: Address;
 }
 
+export const base64toHex = (base64: string): string => {
+  return Buffer.from(base64, "base64").toString("hex");
+};
+
 export const validateUserFriendlyAddress = (
   s: string,
   isTestnet: boolean
@@ -31,15 +35,13 @@ export const explorerUrl = (address: string, isTestnet: boolean) => {
   );
 };
 
-const addressCache: { [key: string]: string } = {};
-
 export const getAddressFormat = async (
   address: Address,
   isTestnet: boolean
 ): Promise<AddressInfo> => {
   const raw = address.toRawString();
 
-  let friendly = addressCache[raw];
+  let friendly = localStorage.getItem("address_" + raw);
   if (!friendly) {
     const result = await sendToIndex(
       "addressBook",
@@ -47,7 +49,7 @@ export const getAddressFormat = async (
       isTestnet
     );
     friendly = result[raw].user_friendly;
-    addressCache[raw] = friendly;
+    localStorage.setItem("address_" + raw, friendly);
   }
 
   return Address.parseFriendly(friendly);

@@ -9,7 +9,9 @@ import {
 import { THEME, TonConnectUI } from "@tonconnect/ui";
 import {
   AddressInfo,
+  base64toHex,
   addressToString,
+  equalsAddressLists,
   equalsMsgAddresses,
   makeAddressLink,
   validateUserFriendlyAddress,
@@ -37,6 +39,10 @@ import { storeStateInit } from "@ton/core/src/types/StateInit";
 import { MyNetworkProvider, sendToIndex } from "./utils/MyNetworkProvider";
 import { Order } from "./multisig/Order";
 import { JettonWallet } from "./jetton/JettonWallet";
+import {
+  SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS,
+  SINGLE_NOMINATOR_POOL_OP_WITHDRAW,
+} from "./multisig/Constants";
 
 // UI COMMON
 
@@ -139,6 +145,32 @@ const showScreen = (name: ScreenType): void => {
       break;
   }
 };
+
+const goHome = (): void => {
+  if (
+    currentScreen === "startScreen" ||
+    currentScreen === "loadingScreen" ||
+    currentScreen === "multisigScreen"
+  ) {
+    return;
+  }
+  if (
+    currentScreen === "importScreen" ||
+    (currentScreen === "newMultisigScreen" && !currentMultisigInfo)
+  ) {
+    newMultisigClear();
+    showScreen("startScreen");
+  } else {
+    clearOrder();
+    newOrderClear();
+    newMultisigClear();
+    pushUrlState(currentMultisigAddress);
+    showScreen("multisigScreen");
+  }
+};
+
+$("#header_logo").addEventListener("click", () => goHome());
+$("#header_title").addEventListener("click", () => goHome());
 
 // TONCONNECT
 
@@ -291,9 +323,11 @@ const renderCurrentMultisigInfo = (): void => {
           lastOrder.order.id
         }" order-address="${addressToString(
           lastOrder.order.address
-        )}"><span class="orderListItem_title">Ошибка в заявке №${
+        )}"><span class="orderListItem_title">Ошибка заявки №${
           lastOrder.order.id
-        }</span> — Ошибка выполнения</div>`;
+        }</span> — Ошибка выполнения — <a href="https://tonviewer.com/transaction/${base64toHex(
+          lastOrder.transactionHash
+        )}" target="_blank">Ссылка на транзакцию</a></div>`;
       }
       return `<div class="multisig_lastOrder" order-id="${
         lastOrder.order.id
@@ -325,6 +359,12 @@ const renderCurrentMultisigInfo = (): void => {
 
           text += isSigned ? " — Вы одобрили" : ` — Вы отклонили заявку`;
         }
+      }
+
+      if (lastOrder.type === "executed") {
+        text += ` — <a href="https://tonviewer.com/transaction/${base64toHex(
+          lastOrder.transactionHash
+        )}" target="_blank">Ссылка на транзакцию</a>`;
       }
 
       return `<div class="multisig_lastOrder" order-id="${
@@ -359,6 +399,7 @@ const renderCurrentMultisigInfo = (): void => {
 
   $$(".multisig_lastOrder").forEach((div) => {
     div.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).tagName === "A") return; // ссылка на транзакцию
       const attributes = (e.currentTarget as HTMLElement).attributes;
       const orderAddressString = attributes.getNamedItem("order-address").value;
       const orderId = BigInt(attributes.getNamedItem("order-id").value);
@@ -380,7 +421,7 @@ const updateMultisig = async (
       MULTISIG_ORDER_CODE,
       IS_TESTNET,
       "aggregate",
-      isFirst
+      false
     );
 
     // Render if still relevant
@@ -484,15 +525,32 @@ const renderCurrentOrderInfo = (): void => {
     threshold,
     signers,
     expiresAt,
+    isMismatchThreshold,
+    isMismatchSigners,
   } = currentOrderInfo;
 
   const isExpired = new Date().getTime() > expiresAt.getTime();
 
   $("#order_tonBalance").innerText = fromNano(tonBalance) + " TON";
-  $("#order_executed").innerText = isExecuted ? "Да" : "Нет";
+
+  let executedTxLink = "";
+  if (isExecuted) {
+    const lastOrder = currentMultisigInfo.lastOrders.find(
+      (lo) => lo.order.id === currentOrderInfo.orderId
+    );
+    if (lastOrder) {
+      executedTxLink += ` — <a href="https://tonviewer.com/transaction/${base64toHex(
+        lastOrder.transactionHash
+      )}" target="_blank">Ссылка на транзакцию</a>`;
+    }
+  }
+
+  $("#order_executed").innerHTML = isExecuted
+    ? "Да" + executedTxLink
+    : "Еще нет";
   $("#order_approvals").innerText = approvalsNum + "/" + threshold;
   $("#order_expiresAt").innerText =
-    (isExpired ? "❌ ИСТЕКЛО - " : "") + expiresAt.toString();
+    (isExpired && !isExecuted ? "❌ ИСТЕКЛО - " : "") + expiresAt.toString();
 
   let isApprovedByMe = false;
   let signersHTML = "";
@@ -509,6 +567,13 @@ const renderCurrentOrderInfo = (): void => {
     }${equalsMsgAddresses(signer.address, myAddress) ? YOU_BADGE : ""}</div>`;
   }
   $("#order_signersList").innerHTML = signersHTML;
+
+  $("#order_thresholdError").innerText = isMismatchThreshold
+    ? "Multisig threshold do not match order threshold"
+    : "";
+  $("#order_signersError").innerText = isMismatchSigners
+    ? "Multisig signers do not match order signers"
+    : "";
 
   let actionsHTML = "";
   for (const action of actions) {
@@ -559,7 +624,7 @@ const updateOrder = async (
       MULTISIG_ORDER_CODE,
       currentMultisigInfo,
       IS_TESTNET,
-      isFirstTime
+      false
     );
 
     // Render  if still relevant
@@ -704,7 +769,14 @@ $("#order_approveButton").addEventListener("click", async () => {
 
 // NEW ORDER
 
-type FieldType = "TON" | "Jetton" | "Address" | "URL" | "Status";
+type FieldType =
+  | "TON"
+  | "Jetton"
+  | "Address"
+  | "URL"
+  | "Status"
+  | "String"
+  | "BOC";
 
 interface ValidatedValue {
   value?: any;
@@ -755,11 +827,17 @@ const validateValue = (
     }
   };
 
-  if (value === null || value === undefined || value === "") {
+  if (fieldType !== "String" && (value === undefined || value === "")) {
     return makeError(`Пусто`);
   }
 
   switch (fieldType) {
+    case "String":
+      return {
+        value,
+        error: undefined,
+      };
+
     case "TON":
       return parseAmount(value, 9);
 
@@ -790,6 +868,12 @@ const validateValue = (
           "Неправильный статус. Пожалуйста, используйте: " +
             LOCK_TYPES.join(", ")
         );
+      }
+    case "BOC":
+      try {
+        return makeValue(Cell.fromBase64(value));
+      } catch (error) {
+        return makeError("Неправильный BOC");
       }
   }
 };
@@ -906,8 +990,19 @@ const orderTypes: OrderType[] = [
         name: "Получатель",
         type: "Address",
       },
+      comment: {
+        name: "Комментарий",
+        type: "String",
+      },
     },
     makeMessage: async (values) => {
+      const body = !values.comment
+        ? beginCell().endCell()
+        : beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(values.comment)
+            .endCell();
+
       return {
         toAddress: values.toAddress,
         tonAmount: values.amount,
@@ -931,6 +1026,10 @@ const orderTypes: OrderType[] = [
         name: "Получатель",
         type: "Address",
       },
+      comment: {
+        name: "Комментарий",
+        type: "String",
+      },
     },
     makeMessage: async (values): Promise<MakeMessageResult> => {
       const jettonMinterAddress: Address = values.jettonMinterAddress.address;
@@ -942,6 +1041,13 @@ const orderTypes: OrderType[] = [
         provider,
         multisigAddress
       );
+
+      const forwardPayload = !values.comment
+        ? null
+        : beginCell()
+            .storeUint(0, 32)
+            .storeStringTail(values.comment)
+            .endCell();
 
       return {
         toAddress: {
@@ -956,7 +1062,7 @@ const orderTypes: OrderType[] = [
           multisigAddress,
           null,
           0n,
-          null
+          forwardPayload
         ),
       };
     },
@@ -1180,6 +1286,93 @@ const orderTypes: OrderType[] = [
       };
     },
   },
+  {
+    name: "Единый пул номинаторов: Вывести",
+    fields: {
+      amount: {
+        name: "Количество TON для оплаты газа",
+        type: "TON",
+      },
+      toAddress: {
+        name: "Адрес пула",
+        type: "Address",
+      },
+      withdrawAmount: {
+        name: "Сумма вывода TON",
+        type: "TON",
+      },
+    },
+    makeMessage: async (values) => {
+      const body = beginCell()
+        .storeUint(SINGLE_NOMINATOR_POOL_OP_WITHDRAW, 32)
+        .storeUint(0, 64) // query id
+        .storeCoins(values.withdrawAmount)
+        .endCell();
+
+      return {
+        toAddress: values.toAddress,
+        tonAmount: values.amount,
+        body: body,
+      };
+    },
+  },
+
+  {
+    name: "Единый пул номинаторов: Изменить адрес валидатора",
+    fields: {
+      amount: {
+        name: "Количество TON для оплаты газа",
+        type: "TON",
+      },
+      toAddress: {
+        name: "Адрес пула",
+        type: "Address",
+      },
+      validatorAddress: {
+        name: "Новый адрес валидатора",
+        type: "Address",
+      },
+    },
+    makeMessage: async (values) => {
+      const validatorAddress: Address = values.validatorAddress.address;
+
+      const body = beginCell()
+        .storeUint(SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS, 32)
+        .storeUint(0, 64) // query id
+        .storeAddress(validatorAddress)
+        .endCell();
+
+      return {
+        toAddress: values.toAddress,
+        tonAmount: values.amount,
+        body: body,
+      };
+    },
+  },
+  {
+    name: "Произвольная заявка",
+    fields: {
+      order: {
+        name: "Заявка BOC (body cell в формате Base64)",
+        type: "BOC",
+      },
+      amount: {
+        name: "Количество TON",
+        type: "TON",
+      },
+      toAddress: {
+        name: "Адрес получателя",
+        type: "Address",
+      },
+    },
+    makeMessage: async (values): Promise<MakeMessageResult> => {
+      return {
+        toAddress: values.toAddress,
+        tonAmount: values.amount,
+        body: values.order,
+      };
+    },
+  },
 ];
 
 const getOrderTypesHTML = (): string => {
@@ -1246,6 +1439,10 @@ let transactionToSent:
 
 const getNewOrderId = (): string => {
   if (!currentMultisigInfo) return "";
+
+  if (currentMultisigInfo.lastOrders.length === 0) {
+    return "1";
+  }
 
   let highestOrderId = -1n;
   currentMultisigInfo.lastOrders.forEach((lastOrder) => {
@@ -1861,6 +2058,31 @@ $("#newMultisig_createButton").addEventListener("click", async () => {
     }
 
     const isSigner = mySignerIndex > -1;
+
+    let hasPendingOrder = false;
+    for (const lastOrder of currentMultisigInfo.lastOrders) {
+      if (lastOrder.type === "pending") {
+        hasPendingOrder = true;
+        break;
+      }
+    }
+
+    if (
+      hasPendingOrder &&
+      (!equalsAddressLists(
+        signersAddresses,
+        currentMultisigInfo.signers.map((a) => a.address)
+      ) ||
+        currentMultisigInfo.threshold < threshold)
+    ) {
+      if (
+        !confirm(
+          "У вас есть отложенные заявки, измените конфигурацию мультикошелька. Эти отложенные заявки больше не могут быть исполнены. Вы хотите продолжить?"
+        )
+      ) {
+        return;
+      }
+    }
 
     const expireAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30; // 1 month
 

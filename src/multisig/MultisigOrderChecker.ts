@@ -24,6 +24,10 @@ import {
   lockTypeToDescription,
 } from "../jetton/JettonMinter";
 import { CommonMessageInfoRelaxedInternal } from "@ton/core/src/types/CommonMessageInfoRelaxed";
+import {
+  SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS,
+  SINGLE_NOMINATOR_POOL_OP_WITHDRAW,
+} from "./Constants";
 
 export interface MultisigOrderInfo {
   address: AddressInfo;
@@ -37,6 +41,8 @@ export interface MultisigOrderInfo {
   expiresAt: Date;
   actions: string[];
   stateInitMatches: boolean;
+  isMismatchSigners: boolean;
+  isMismatchThreshold: boolean;
 }
 
 const checkNumber = (n: number) => {
@@ -51,7 +57,7 @@ export const checkMultisigOrder = async (
   multisigOrderCode: Cell,
   multisigInfo: MultisigInfo,
   isTestnet: boolean,
-  needAdditionalChecks: boolean
+  needAdditionalGetMethodChecks: boolean
 ): Promise<MultisigOrderInfo> => {
   // Account State and Data
 
@@ -114,21 +120,18 @@ export const checkMultisigOrder = async (
     "Неправильный адрес заявки"
   );
 
+  let isMismatchSigners = false;
+  let isMismatchThreshold = false;
+
   if (!parsedData.isExecuted) {
-    assert(
-      multisigInfo.threshold <= parsedData.threshold,
-      "Количество подтверждающих не соответствует порогу заявки"
-    );
-    assert(
-      equalsAddressLists(
-        multisigInfo.signers.map((a) => a.address),
-        parsedData.signers
-      ),
-      "Количество подтверждающих не совпадает с количеством в заявке"
+    isMismatchThreshold = multisigInfo.threshold > parsedData.threshold;
+    isMismatchSigners = !equalsAddressLists(
+      multisigInfo.signers.map((a) => a.address),
+      parsedData.signers
     );
   }
 
-  if (needAdditionalChecks) {
+  if (needAdditionalGetMethodChecks) {
     // Get-methods
 
     const provider = new MyNetworkProvider(
@@ -259,13 +262,28 @@ export const checkMultisigOrder = async (
       const parsed = JettonMinter.parseTransfer(slice);
       if (parsed.customPayload)
         throw new Error("Отправка состояния не поддерживается");
-      assert(
+      let comment = "";
+      if (
         parsed.forwardPayload.remainingBits === 0 &&
-          parsed.forwardPayload.remainingRefs === 0,
-        "Отправка не поддерживается"
-      );
+        parsed.forwardPayload.remainingRefs === 0
+      ) {
+        comment = "без комментария";
+      } else if (parsed.forwardPayload.remainingBits >= 32) {
+        const op = parsed.forwardPayload.loadUint(32);
+        assert(
+          op === 0,
+          "Прямая передача произвольной полезной нагрузки не поддерживается"
+        );
+        comment =
+          'с комментарием "' + parsed.forwardPayload.loadStringTail() + '"';
+      } else {
+        assert(
+          false,
+          "Прямая передача произвольной полезной нагрузки не поддерживается"
+        );
+      }
       const toAddress = await formatAddressAndUrl(parsed.toAddress, isTestnet);
-      return `Отправить ${parsed.jettonAmount} жетонов с адреса мультикошелька на адрес пользователя ${toAddress};`;
+      return `Отправить ${parsed.jettonAmount} жетонов с адреса мультикошелька на адрес пользователя ${toAddress} с комментарием ${comment};`;
     } catch (e) {}
 
     try {
@@ -328,7 +346,36 @@ export const checkMultisigOrder = async (
       )} TON для оплаты комиссии`;
     } catch (e) {}
 
-    throw new Error("Неподдерживаемое действие");
+    try {
+      const slice = cell.beginParse();
+      const op = slice.loadUint(32);
+      // https://github.com/ton-blockchain/mytonctrl/blob/master/mytoncore/contracts/single-nominator-pool/single-nominator-code.fc#L98
+      if (op === SINGLE_NOMINATOR_POOL_OP_WITHDRAW) {
+        const queryId = slice.loadUint(64);
+        const coins = slice.loadCoins();
+        return `Вывести ${fromNano(coins)} TON из пула номинаторов.`;
+      }
+    } catch (e) {}
+
+    try {
+      const slice = cell.beginParse();
+      const op = slice.loadUint(32);
+      // https://github.com/ton-blockchain/mytonctrl/blob/master/mytoncore/contracts/single-nominator-pool/single-nominator-code.fc#L106
+      if (op === SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS) {
+        const queryId = slice.loadUint(64);
+        const validatorAddress = slice.loadAddress();
+        const validatorAddressUrl = await formatAddressAndUrl(
+          validatorAddress,
+          isTestnet
+        );
+
+        return `Сменить валидатора на ${validatorAddressUrl} в пуле номинаторов.`;
+      }
+    } catch (e) {}
+
+    return `<span class="error">ВНИМАНИЕ - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span></b><br>Необработанные данные тела сообщения: "${cell
+      .toBoc()
+      .toString("base64")}".`;
   };
 
   let parsedActions: string[] = [];
@@ -361,7 +408,9 @@ export const checkMultisigOrder = async (
         sendModeString.push("Перенести весь остаток входящего сообщения");
       }
       if (sendMode & 32) {
-        sendModeString.push("УНИЧТОЖИТЬ АККАУНТ");
+        throw new Error(
+          "Заявка недействительна, поскольку в режиме отправки (+32) мультикошелек будет удален"
+        );
       }
 
       const actionBody = slice.loadRef();
@@ -370,6 +419,16 @@ export const checkMultisigOrder = async (
       console.log(messageRelaxed);
 
       const info: CommonMessageInfoRelaxedInternal = messageRelaxed.info as any;
+
+      if (info.ihrFee !== 0n) {
+        throw new Error("Заявка недействительна: комиссия IHR больше 0");
+      }
+
+      if (info.forwardFee !== 0n) {
+        throw new Error(
+          "Заявка недействительна: комиссия за пересылку больше 0"
+        );
+      }
 
       const destAddress = await formatAddressAndUrl(info.dest, isTestnet);
       actionString += `<div>Отправить ${
@@ -435,5 +494,7 @@ export const checkMultisigOrder = async (
     expiresAt: new Date(parsedData.expirationDate * 1000),
     actions: parsedActions,
     stateInitMatches,
+    isMismatchSigners,
+    isMismatchThreshold,
   };
 };
