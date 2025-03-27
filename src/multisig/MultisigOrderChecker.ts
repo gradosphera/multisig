@@ -53,7 +53,7 @@ export const checkMultisigOrder = async (
   multisigOrderCode: Cell,
   multisigInfo: MultisigInfo,
   isTestnet: boolean,
-  needAdditionalChecks: boolean
+  needAdditionalGetMethodChecks: boolean
 ): Promise<MultisigOrderInfo> => {
   // Account State and Data
 
@@ -127,7 +127,7 @@ export const checkMultisigOrder = async (
     );
   }
 
-  if (needAdditionalChecks) {
+  if (needAdditionalGetMethodChecks) {
     // Get-methods
 
     const provider = new MyNetworkProvider(
