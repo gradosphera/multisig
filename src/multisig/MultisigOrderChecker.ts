@@ -353,7 +353,7 @@ export const checkMultisigOrder = async (
       if (op === SINGLE_NOMINATOR_POOL_OP_WITHDRAW) {
         const queryId = slice.loadUint(64);
         const coins = slice.loadCoins();
-        return `Вывести ${fromNano(coins)} TON из пула`;
+        return `Вывести ${fromNano(coins)} TON из пула номинаторов.`;
       }
     } catch (e) {}
 
@@ -369,13 +369,13 @@ export const checkMultisigOrder = async (
           isTestnet
         );
 
-        return `Сменить валидатора на ${validatorAddressUrl}`;
+        return `Сменить валидатора на ${validatorAddressUrl} в пуле номинаторов.`;
       }
     } catch (e) {}
 
-    return `<span class="error">Внимание - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span> Необработанные данные заявки: "<pre>${cell
+    return `<span class="error">ВНИМАНИЕ - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span></b><br>Необработанные данные тела сообщения: "${cell
       .toBoc()
-      .toString("base64")}</pre>"`;
+      .toString("base64")}".`;
   };
 
   let parsedActions: string[] = [];
