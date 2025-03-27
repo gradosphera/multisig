@@ -2,6 +2,7 @@ import {
   AddressInfo,
   addressToString,
   assert,
+  base64toHex,
   equalsAddressLists,
   formatAddressAndUrl,
   getAddressFormat,
@@ -405,12 +406,8 @@ export const checkMultisig = async (
 
       const getFailedOrder = async (lastOrder: LastOrder) => {
         if (lastOrder.type === "executed") {
-          const transactionHashHex = Buffer.from(
-            lastOrder.transactionHash,
-            "base64"
-          ).toString("hex");
           const result = await sendToTonApi(
-            "traces/" + transactionHashHex,
+            "traces/" + base64toHex(lastOrder.transactionHash),
             {},
             isTestnet
           );
@@ -445,7 +442,7 @@ export const checkMultisig = async (
             ) {
               lastOrder.type = "executed";
               lastOrder.errorMessage =
-                "Multisig signers or threshold do not match order";
+                "Участники с несколькими подписями или пороговое значение голосов не соответствуют порядку";
             }
           } catch (e) {
             lastOrder.type = "executed";

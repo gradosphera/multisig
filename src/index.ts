@@ -9,6 +9,7 @@ import {
 import { THEME, TonConnectUI } from "@tonconnect/ui";
 import {
   AddressInfo,
+  base64toHex,
   addressToString,
   equalsAddressLists,
   equalsMsgAddresses,
@@ -314,9 +315,11 @@ const renderCurrentMultisigInfo = (): void => {
           lastOrder.order.id
         }" order-address="${addressToString(
           lastOrder.order.address
-        )}"><span class="orderListItem_title">Ошибка в заявке №${
+        )}"><span class="orderListItem_title">Ошибка заявки №${
           lastOrder.order.id
-        }</span> — Ошибка выполнения</div>`;
+        }</span> — Ошибка выполнения — <a href="https://tonviewer.com/transaction/${base64toHex(
+          lastOrder.transactionHash
+        )}" target="_blank">Ссылка на транзакцию</a></div>`;
       }
       return `<div class="multisig_lastOrder" order-id="${
         lastOrder.order.id
@@ -348,6 +351,12 @@ const renderCurrentMultisigInfo = (): void => {
 
           text += isSigned ? " — Вы одобрили" : ` — Вы отклонили заявку`;
         }
+      }
+
+      if (lastOrder.type === "executed") {
+        text += ` — <a href="https://tonviewer.com/transaction/${base64toHex(
+          lastOrder.transactionHash
+        )}" target="_blank">Ссылка на транзакцию</a>`;
       }
 
       return `<div class="multisig_lastOrder" order-id="${
@@ -382,6 +391,7 @@ const renderCurrentMultisigInfo = (): void => {
 
   $$(".multisig_lastOrder").forEach((div) => {
     div.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).tagName === "A") return; // ссылка на транзакцию
       const attributes = (e.currentTarget as HTMLElement).attributes;
       const orderAddressString = attributes.getNamedItem("order-address").value;
       const orderId = BigInt(attributes.getNamedItem("order-id").value);
@@ -514,7 +524,22 @@ const renderCurrentOrderInfo = (): void => {
   const isExpired = new Date().getTime() > expiresAt.getTime();
 
   $("#order_tonBalance").innerText = fromNano(tonBalance) + " TON";
-  $("#order_executed").innerText = isExecuted ? "Да" : "Нет";
+
+  let executedTxLink = "";
+  if (isExecuted) {
+    const lastOrder = currentMultisigInfo.lastOrders.find(
+      (lo) => lo.order.id === currentOrderInfo.orderId
+    );
+    if (lastOrder) {
+      executedTxLink += ` — <a href="https://tonviewer.com/transaction/${base64toHex(
+        lastOrder.transactionHash
+      )}" target="_blank">Ссылка на транзакцию</a>`;
+    }
+  }
+
+  $("#order_executed").innerHTML = isExecuted
+    ? "Да" + executedTxLink
+    : "Еще нет";
   $("#order_approvals").innerText = approvalsNum + "/" + threshold;
   $("#order_expiresAt").innerText =
     (isExpired ? "❌ ИСТЕКЛО - " : "") + expiresAt.toString();

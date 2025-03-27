@@ -7,6 +7,10 @@ export interface AddressInfo {
   address: Address;
 }
 
+export const base64toHex = (base64: string): string => {
+  return Buffer.from(base64, "base64").toString("hex");
+};
+
 export const validateUserFriendlyAddress = (
   s: string,
   isTestnet: boolean
