@@ -1287,18 +1287,18 @@ const orderTypes: OrderType[] = [
     },
   },
   {
-    name: "Single nominator pool: Withdraw",
+    name: "Единый пул номинаторов: Вывести",
     fields: {
       amount: {
-        name: "TON Amount for gas",
+        name: "Количество TON для оплаты газа",
         type: "TON",
       },
       toAddress: {
-        name: "Pool Address",
+        name: "Адрес пула",
         type: "Address",
       },
       withdrawAmount: {
-        name: "Withdraw TON amount",
+        name: "Сумма вывода TON",
         type: "TON",
       },
     },
