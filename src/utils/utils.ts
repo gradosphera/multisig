@@ -35,8 +35,6 @@ export const explorerUrl = (address: string, isTestnet: boolean) => {
   );
 };
 
-const addressCache: { [key: string]: string } = {};
-
 export const getAddressFormat = async (
   address: Address,
   isTestnet: boolean
