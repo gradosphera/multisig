@@ -408,7 +408,9 @@ export const checkMultisigOrder = async (
         sendModeString.push("Перенести весь остаток входящего сообщения");
       }
       if (sendMode & 32) {
-        sendModeString.push("УНИЧТОЖИТЬ АККАУНТ");
+        throw new Error(
+          "Заявка недействительна, поскольку в режиме отправки (+32) мультикошелек будет удален"
+        );
       }
 
       const actionBody = slice.loadRef();
@@ -417,6 +419,16 @@ export const checkMultisigOrder = async (
       console.log(messageRelaxed);
 
       const info: CommonMessageInfoRelaxedInternal = messageRelaxed.info as any;
+
+      if (info.ihrFee !== 0n) {
+        throw new Error("Заявка недействительна: комиссия IHR больше 0");
+      }
+
+      if (info.forwardFee !== 0n) {
+        throw new Error(
+          "Заявка недействительна: комиссия за пересылку больше 0"
+        );
+      }
 
       const destAddress = await formatAddressAndUrl(info.dest, isTestnet);
       actionString += `<div>Отправить ${
