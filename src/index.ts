@@ -546,7 +546,7 @@ const renderCurrentOrderInfo = (): void => {
     : "Еще нет";
   $("#order_approvals").innerText = approvalsNum + "/" + threshold;
   $("#order_expiresAt").innerText =
-    (isExpired ? "❌ ИСТЕКЛО - " : "") + expiresAt.toString();
+    (isExpired && !isExecuted ? "❌ ИСТЕКЛО - " : "") + expiresAt.toString();
 
   let isApprovedByMe = false;
   let signersHTML = "";
