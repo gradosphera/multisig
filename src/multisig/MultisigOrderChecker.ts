@@ -24,6 +24,10 @@ import {
   lockTypeToDescription,
 } from "../jetton/JettonMinter";
 import { CommonMessageInfoRelaxedInternal } from "@ton/core/src/types/CommonMessageInfoRelaxed";
+import {
+  SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS,
+  SINGLE_NOMINATOR_POOL_OP_WITHDRAW,
+} from "./Constants";
 
 export interface MultisigOrderInfo {
   address: AddressInfo;
@@ -340,6 +344,33 @@ export const checkMultisigOrder = async (
       } жетонов с адреса пользователя ${userAddress}; ${fromNano(
         parsed.tonAmount
       )} TON для оплаты комиссии`;
+    } catch (e) {}
+
+    try {
+      const slice = cell.beginParse();
+      const op = slice.loadUint(32);
+      // https://github.com/ton-blockchain/mytonctrl/blob/master/mytoncore/contracts/single-nominator-pool/single-nominator-code.fc#L98
+      if (op === SINGLE_NOMINATOR_POOL_OP_WITHDRAW) {
+        const queryId = slice.loadUint(64);
+        const coins = slice.loadCoins();
+        return `Вывести ${fromNano(coins)} TON из пула`;
+      }
+    } catch (e) {}
+
+    try {
+      const slice = cell.beginParse();
+      const op = slice.loadUint(32);
+      // https://github.com/ton-blockchain/mytonctrl/blob/master/mytoncore/contracts/single-nominator-pool/single-nominator-code.fc#L106
+      if (op === SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS) {
+        const queryId = slice.loadUint(64);
+        const validatorAddress = slice.loadAddress();
+        const validatorAddressUrl = await formatAddressAndUrl(
+          validatorAddress,
+          isTestnet
+        );
+
+        return `Сменить валидатора на ${validatorAddressUrl}`;
+      }
     } catch (e) {}
 
     return `<span class="error">Внимание - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span> Необработанные данные заявки: "<pre>${cell
