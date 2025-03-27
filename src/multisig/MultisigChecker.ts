@@ -389,7 +389,10 @@ export const checkMultisig = async (
       const findFailTx = (tonApiResult: any): boolean => {
         if (tonApiResult.transaction) {
           if (tonApiResult.transaction.success === false) {
-            if (tonApiResult.transaction.in_msg.decoded_op_name !== "excess") {
+            if (
+              tonApiResult.transaction.in_msg.decoded_op_name !== "excess" &&
+              !tonApiResult.transaction.in_msg.bounced
+            ) {
               return true;
             }
           }
