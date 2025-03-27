@@ -342,7 +342,9 @@ export const checkMultisigOrder = async (
       )} TON для оплаты комиссии`;
     } catch (e) {}
 
-    throw new Error("Неподдерживаемое действие");
+    return `<span class="error">Внимание - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span> Необработанные данные заявки: "<pre>${cell
+      .toBoc()
+      .toString("base64")}</pre>"`;
   };
 
   let parsedActions: string[] = [];

@@ -765,7 +765,14 @@ $("#order_approveButton").addEventListener("click", async () => {
 
 // NEW ORDER
 
-type FieldType = "TON" | "Jetton" | "Address" | "URL" | "Status" | "String";
+type FieldType =
+  | "TON"
+  | "Jetton"
+  | "Address"
+  | "URL"
+  | "Status"
+  | "String"
+  | "BOC";
 
 interface ValidatedValue {
   value?: any;
@@ -857,6 +864,12 @@ const validateValue = (
           "Неправильный статус. Пожалуйста, используйте: " +
             LOCK_TYPES.join(", ")
         );
+      }
+    case "BOC":
+      try {
+        return makeValue(Cell.fromBase64(value));
+      } catch (error) {
+        return makeError("Неправильный BOC");
       }
   }
 };
@@ -1266,6 +1279,30 @@ const orderTypes: OrderType[] = [
           lockTypeToInt(values.newStatus),
           DEFAULT_INTERNAL_AMOUNT
         ),
+      };
+    },
+  },
+  {
+    name: "Произвольная заявка",
+    fields: {
+      order: {
+        name: "Заявка BOC (body cell в формате Base64)",
+        type: "BOC",
+      },
+      amount: {
+        name: "Количество TON",
+        type: "TON",
+      },
+      toAddress: {
+        name: "Адрес получателя",
+        type: "Address",
+      },
+    },
+    makeMessage: async (values): Promise<MakeMessageResult> => {
+      return {
+        toAddress: values.toAddress,
+        tonAmount: values.amount,
+        body: values.order,
       };
     },
   },
