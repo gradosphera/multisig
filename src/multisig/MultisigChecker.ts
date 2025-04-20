@@ -415,7 +415,7 @@ export const checkMultisig = async (
             isTestnet
           );
           if (findFailTx(result)) {
-            lastOrder.errorMessage = "Failed";
+            lastOrder.errorMessage = "Ошибка";
           }
         }
       };

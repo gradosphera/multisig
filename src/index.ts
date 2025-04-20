@@ -4,6 +4,7 @@ import {
   Cell,
   fromNano,
   SendMode,
+  storeMessageRelaxed,
   toNano,
 } from "@ton/core";
 import { THEME, TonConnectUI } from "@tonconnect/ui";
@@ -42,6 +43,7 @@ import { JettonWallet } from "./jetton/JettonWallet";
 import {
   SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS,
   SINGLE_NOMINATOR_POOL_OP_WITHDRAW,
+  VESTING_INTERNAL_TRANSFER,
 } from "./multisig/Constants";
 
 // UI COMMON
@@ -333,7 +335,7 @@ const renderCurrentMultisigInfo = (): void => {
         lastOrder.order.id
       }" order-address="${addressToString(
         lastOrder.order.address
-      )}"><span class="orderListItem_title">Недействительная заявка #${
+      )}"><span class="orderListItem_title">Недействительная заявка №${
         lastOrder.order.id
       }</span> — ${lastOrder.errorMessage}</div>`;
     } else {
@@ -1349,6 +1351,73 @@ const orderTypes: OrderType[] = [
       };
     },
   },
+
+  {
+    name: "Вестинг: Отправить из вестинга (0.1 TON за оплату газа)",
+    fields: {
+      vestingAddress: {
+        name: "Адрес вестинга",
+        type: "Address",
+      },
+      destinationAddress: {
+        name: "Адрес получателя",
+        type: "Address",
+      },
+      amount: {
+        name: "Количество TON",
+        type: "TON",
+      },
+      comment: {
+        // todo: Add support for base64/hex/boc payload
+        name: "Комментарий",
+        type: "String",
+      },
+    },
+    makeMessage: async (values) => {
+      const destinationAddress: Address = values.destinationAddress.address;
+
+      const body = beginCell()
+        .storeUint(VESTING_INTERNAL_TRANSFER, 32)
+        .storeUint(0, 64) // query_id
+        .storeUint(3, 8) // send_mode
+        .storeRef(
+          beginCell()
+            .store(
+              storeMessageRelaxed({
+                info: {
+                  type: "internal",
+                  ihrDisabled: true,
+                  bounce: true, // we can send only bounceable messages from non-expired vesting
+                  bounced: false,
+                  dest: destinationAddress,
+                  value: {
+                    coins: values.amount,
+                  },
+                  ihrFee: 0n,
+                  forwardFee: 0n,
+                  createdLt: 0n,
+                  createdAt: 0,
+                },
+                body: values.comment
+                  ? beginCell()
+                      .storeUint(0, 32)
+                      .storeStringTail(values.comment)
+                      .endCell()
+                  : beginCell().endCell(),
+              })
+            )
+            .endCell()
+        )
+        .endCell();
+
+      return {
+        toAddress: values.vestingAddress,
+        tonAmount: toNano("0.1"), // 0.1 TON for gas
+        body: body,
+      };
+    },
+  },
+
   {
     name: "Произвольная заявка",
     fields: {

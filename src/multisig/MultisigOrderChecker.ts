@@ -13,6 +13,7 @@ import {
   Dictionary,
   fromNano,
   loadMessageRelaxed,
+  CommonMessageInfoRelaxedInternal,
 } from "@ton/core";
 import { cellToArray, endParse } from "./Multisig";
 import { Order, parseOrderData } from "./Order";
@@ -23,10 +24,10 @@ import {
   JettonMinter,
   lockTypeToDescription,
 } from "../jetton/JettonMinter";
-import { CommonMessageInfoRelaxedInternal } from "@ton/core/src/types/CommonMessageInfoRelaxed";
 import {
   SINGLE_NOMINATOR_POOL_OP_CHANGE_VALIDATOR_ADDRESS,
   SINGLE_NOMINATOR_POOL_OP_WITHDRAW,
+  VESTING_INTERNAL_TRANSFER,
 } from "./Constants";
 
 export interface MultisigOrderInfo {
@@ -372,6 +373,54 @@ export const checkMultisigOrder = async (
         return `Сменить валидатора на ${validatorAddressUrl} в пуле номинаторов.`;
       }
     } catch (e) {}
+
+    try {
+      const slice = cell.beginParse();
+      const op = slice.loadUint(32);
+      if (op === VESTING_INTERNAL_TRANSFER) {
+        const queryId = slice.loadUint(64);
+        const sendMode = slice.loadUint(8);
+        if (sendMode !== 3)
+          throw new Error("only send mode 3 supported by vesting");
+        const msg = slice.loadRef();
+        endParse(slice);
+
+        const messageRelaxed = loadMessageRelaxed(msg.beginParse());
+        const messageRelaxedInfo =
+          messageRelaxed.info as CommonMessageInfoRelaxedInternal;
+        const messageBodyBoc = messageRelaxed.body.toBoc();
+        const messageBody = messageRelaxed.body.beginParse();
+
+        let actionString = "Then send from vesting ";
+        const destAddress = await formatAddressAndUrl(
+          messageRelaxedInfo.dest,
+          isTestnet
+        );
+        actionString += `${fromNano(
+          messageRelaxedInfo.value.coins
+        )} TON to ${destAddress}`;
+
+        if (
+          messageBody.remainingBits === 0 &&
+          messageBody.remainingRefs === 0
+        ) {
+          // no payload
+        } else if (
+          messageBody.remainingBits > 32 &&
+          messageBody.loadUint(32) == 0
+        ) {
+          actionString += ' with text "' + messageBody.loadStringTail() + '".';
+        } else {
+          actionString += ` with data: "${messageBodyBoc.toString(
+            "base64"
+          )}". `;
+        }
+
+        return actionString;
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     return `<span class="error">ВНИМАНИЕ - Неизвестное действие! Эта заявка содержит произвольные действия! Опасно! Не подписывайте, если точно не знаете, что делаете!</span></b><br>Необработанные данные тела сообщения: "${cell
       .toBoc()
